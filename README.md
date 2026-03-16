@@ -1,2 +1,2 @@
 # Nanyu_awa
-Lightweight Minecraft fabric mods
+Minecraft 最新版本轻量化Fabric模组

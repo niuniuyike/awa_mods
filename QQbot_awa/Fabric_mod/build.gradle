@@ -1,0 +1,51 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version '1.15-SNAPSHOT'
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	maven { url "https://maven.aliyun.com/repository/public" }
+	mavenCentral()
+}
+
+loom {
+	splitEnvironmentSourceSets()
+	mods {
+		"awabot-mod" {
+			sourceSet sourceSets.main
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+processResources {
+	// 关键修复：解决 Gradle 9.3 配置缓存引用 project 报错
+	def ver = project.version.toString()
+	inputs.property "version", ver
+	filesMatching("fabric.mod.json") {
+		expand "version": ver
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = "UTF-8"
+	options.release = 25
+}
+
+java {
+	withSourcesJar()
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}

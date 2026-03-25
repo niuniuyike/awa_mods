@@ -1,0 +1,30 @@
+{
+	"schemaVersion": 1,
+	"id": "awa_mod",
+	"version": "1.1",
+	"name": "Awa Bot",
+	"description": "A simple bot mod for Minecraft 26.1",
+	"authors": [
+		"msu333"
+	],
+	"contact": {
+		"homepage": "https://github.com/msu333/awabot",
+		"sources": "https://github.com/msu333/awabot"
+	},
+	"license": "MIT",
+	"icon": "assets/awa_mod/icon.png",
+	"environment": "server",
+	"entrypoints": {
+		"server": [
+			"top.msu333.AwaBot"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.18.4",
+		"minecraft": "26.1",
+		"java": ">=25",
+		"fabric-api": ">=0.144.0"
+	},
+	"mixins": [
+	]
+}

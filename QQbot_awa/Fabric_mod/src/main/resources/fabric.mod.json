@@ -8,8 +8,8 @@
 		"msu333"
 	],
 	"contact": {
-		"homepage": "https://github.com/msu333/awabot",
-		"sources": "https://github.com/msu333/awabot"
+		"homepage": "https://github.com/niuniuyike/awa_mods",
+		"sources": "https://github.com/niuniuyike/awa_mods"
 	},
 	"license": "MIT",
 	"icon": "assets/awa_mod/icon.png",
@@ -21,9 +21,9 @@
 	},
 	"depends": {
 		"fabricloader": ">=0.18.4",
-		"minecraft": "26.1",
+		"minecraft": "26.1.2",
 		"java": ">=25",
-		"fabric-api": ">=0.144.0"
+		"fabric-api": ">=0.145.4"
 	},
 	"mixins": [
 	]

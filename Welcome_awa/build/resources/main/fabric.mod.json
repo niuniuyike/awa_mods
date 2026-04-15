@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "welcome-mod",
-  "version": "1.1",
+  "version": "1.2",
   "name": "Welcome Mod",
   "description": "A simple welcome mod for Minecraft 26.1",
   "authors": [
-    "YourName"
+    "Nanyu"
   ],
   "contact": {},
   "license": "MIT",
@@ -13,13 +13,13 @@
   "environment": "server",
   "entrypoints": {
     "server": [
-      "com.example.welcomemod.WelcomeMod"
+      "top.msu333.welcomemod.WelcomeMod"
     ]
   },
   "mixins": [],
   "depends": {
     "fabricloader": ">=0.18.4",
-    "minecraft": "26.1",
+    "minecraft": "26.1.2",
     "java": ">=25"
   }
 }

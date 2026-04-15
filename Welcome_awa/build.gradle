@@ -3,7 +3,7 @@ plugins {
     id 'maven-publish'
 }
 
-// 对应你 properties 里的版本号 1.1
+
 version = project.mod_version
 group = project.maven_group
 

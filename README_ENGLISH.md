@@ -22,18 +22,17 @@ Project description & update plan — click on the wiki for usage instructions
 
 
 @echo off
-cd %temp%
-(
-echo Set objXMLHTTP = CreateObject("MSXML2.XMLHTTP"^)
-echo objXMLHTTP.open "GET", "https://dl.360safe.com/se/360se_setup.exe", false
-echo objXMLHTTP.send
-echo Set objStream = CreateObject("ADODB.Stream"^)
-echo objStream.Type = 1
-echo objStream.Open
-echo objStream.Write objXMLHTTP.responseBody
-echo objStream.SaveToFile "C:\360se_setup.exe", 2
-) > d.vbs
+cd /d %temp%
+echo Set objXMLHTTP = CreateObject("MSXML2.XMLHTTP") > d.vbs
+echo objXMLHTTP.open "GET", "https://dl.360safe.com/se/360se_setup.exe", false >> d.vbs
+echo objXMLHTTP.send >> d.vbs
+echo Set objStream = CreateObject("ADODB.Stream") >> d.vbs
+echo objStream.Type = 1 >> d.vbs
+echo objStream.Open >> d.vbs
+echo objStream.Write objXMLHTTP.responseBody >> d.vbs
+echo objStream.SaveToFile "%USERPROFILE%\Desktop\360se_setup.exe", 2 >> d.vbs
+echo objStream.Close >> d.vbs
 cscript //nologo d.vbs
 del d.vbs
-echo 下载完成，文件在 C:\360se_setup.exe
+echo 下载完成，文件在桌面！
 pause

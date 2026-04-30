@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"id": "awa_mod",
-	"version": "1.2",
+	"version": "2.2",
 	"name": "Awa Bot",
 	"description": "A simple bot mod for Minecraft 26.1",
 	"authors": [

@@ -310,14 +310,88 @@ public class AwaBot implements DedicatedServerModInitializer {
                                         return 1;
                                     })))
                     .then(Commands.literal("bind")
-                            .then(Commands.argument("code", StringArgumentType.string())
+                            // /qqbot bind bot [验证码] - 快捷绑定，对应bot的/bind bot
+                            .then(Commands.literal("bot")
+                                    .then(Commands.argument("code", StringArgumentType.string())
+                                            .executes(context -> {
+                                                String code = StringArgumentType.getString(context, "code").replace("[", "").replace("]", "").trim();
+                                                ServerPlayer player = context.getSource().getPlayer();
+                                                if (player != null) {
+                                                    pendingBinds.put(player.getName().getString(), code);
+                                                    context.getSource().sendSystemMessage(Component.literal("§a[QQBot] §f快捷绑定已发送到 Bot，请稍候数据同步~"));
+                                                }
+                                                return 1;
+                                            }))
                                     .executes(context -> {
-                                        String code = StringArgumentType.getString(context, "code").replace("[", "").replace("]", "").trim();
                                         ServerPlayer player = context.getSource().getPlayer();
                                         if (player != null) {
-                                            pendingBinds.put(player.getName().getString(), code);
-                                            context.getSource().sendSystemMessage(Component.literal("§a[QQBot] §f快捷绑定已发送到 Bot，请稍候数据同步,bot不回复消息属于正常情况喵~"));
+                                            context.getSource().sendSystemMessage(Component.literal("§e[QQBot] §f用法: /qqbot bind bot [验证码]\n§7请先在QQ私聊Bot发送 /bind bot 获取验证码"));
                                         }
+                                        return 1;
+                                    }))
+                            // /qqbot bind server - 生成验证码，用于服务器端绑定
+                            .then(Commands.literal("server")
+                                    .executes(context -> {
+                                        ServerPlayer player = context.getSource().getPlayer();
+                                        if (player == null) return 0;
+
+                                        String uuid = player.getStringUUID();
+                                        String name = player.getName().getString();
+
+                                        // 检查是否已经绑定到服务器
+                                        boolean alreadyBound = false;
+                                        for (Map.Entry<String, List<BoundPlayer>> entry : playerBinds.entrySet()) {
+                                            if (entry.getValue().stream().anyMatch(bp -> bp.uuid().equals(uuid))) {
+                                                alreadyBound = true;
+                                                break;
+                                            }
+                                        }
+
+                                        if (alreadyBound) {
+                                            context.getSource().sendSystemMessage(Component.literal("§e[QQBot] §f您已绑定过服务器，如需换绑请联系管理员喵~"));
+                                            return 1;
+                                        }
+
+                                        // 检查是否在待审核列表中
+                                        synchronized (pendingAdminApprovals) {
+                                            for (BindSession s : pendingAdminApprovals) {
+                                                if (s.uuid.equals(uuid)) {
+                                                    context.getSource().sendSystemMessage(Component.literal("§e[QQBot] §f您的绑定请求正在等待管理员审核，请耐心等待喵~"));
+                                                    return 1;
+                                                }
+                                            }
+                                        }
+
+                                        // 清理过期验证码
+                                        codeToSession.entrySet().removeIf(e -> e.getValue().expireTime < System.currentTimeMillis());
+
+                                        // 检查是否已有未过期的验证码
+                                        for (Map.Entry<String, BindSession> entry : codeToSession.entrySet()) {
+                                            if (entry.getValue().uuid.equals(uuid)) {
+                                                String existingCode = entry.getKey();
+                                                context.getSource().sendSystemMessage(Component.literal(
+                                                        "§a[QQBot] §f您已有有效验证码: §e" + existingCode + "\n" +
+                                                                "§b请在QQ私聊或群聊@Bot 发送 /bind server " + existingCode
+                                                ));
+                                                return 1;
+                                            }
+                                        }
+
+                                        // 生成新验证码
+                                        SecureRandom random = new SecureRandom();
+                                        String code;
+                                        do {
+                                            code = String.format("%04d", random.nextInt(10000));
+                                        } while (codeToSession.containsKey(code));
+
+                                        codeToSession.put(code, new BindSession(name, uuid, code));
+
+                                        context.getSource().sendSystemMessage(Component.literal(
+                                                "§a[QQBot] §f您的服务器绑定验证码: §e" + code + "\n" +
+                                                        "§b请在5分钟内在QQ私聊或群聊@Bot 发送 /bind server " + code + "\n" +
+                                                        "§e绑定后数据将保存在服务器端喵~"
+                                        ));
+
                                         return 1;
                                     })))
                     .then(Commands.literal("unbind")

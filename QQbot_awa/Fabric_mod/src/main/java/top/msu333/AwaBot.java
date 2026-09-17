@@ -21,13 +21,17 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
 import javax.crypto.Cipher;
+import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -35,9 +39,11 @@ import java.util.concurrent.*;
 
 public class AwaBot implements DedicatedServerModInitializer {
     private static String currentPassword = "123456";
+    private static boolean weakPassword = false;
     private static int safety = 0;
     private static int preventMultiBind = 1;
     private static int serverPort = 25566;
+    private static String bindAddress = "127.0.0.1";
     private static MinecraftServer mcServer;
     private static HttpServer httpServer;
     private static final long[] tickTimes = new long[100];
@@ -77,9 +83,193 @@ public class AwaBot implements DedicatedServerModInitializer {
     public record TpsResponse(double tps) {}
     public record SecurePayload(String data, long ts) {}
 
+    // ---------- 消息配置 ----------
+    private static final Map<String, String> DEFAULT_MESSAGES = new LinkedHashMap<>();
+    private static final Map<String, String> currentMessages = new ConcurrentHashMap<>();
+
+    static {
+        DEFAULT_MESSAGES.put("kick_bind_required", "§c您需要绑定QQ才能进入\n§f绑定码 [§e{code}§f]\n§b请在5min内私聊或群聊@Bot 并发送 /bind server {code}\n§e绑定后即可进入服务器~\n§e该qq会与服务器绑定，不是与bot绑定");
+        DEFAULT_MESSAGES.put("kick_banned", "§c您关联的QQ已被服务器封禁！\n§f解封时间: {time}");
+        DEFAULT_MESSAGES.put("kick_multi_bind", "§c服务器已开启QQ一对一绑定模式喵！\n§f检测到您的QQ绑定了多个角色，已被系统拦截。\n§e请联系管理员使用 /clean 清理多余的绑定记录~");
+        DEFAULT_MESSAGES.put("kick_pending_admin", "§e您的绑定请求正在等待管理员审核，请稍后再试或联系管理员");
+        DEFAULT_MESSAGES.put("msg_bind_bot_sent", "§a[QQBot] §f快捷绑定已发送到 Bot，请稍候数据同步~");
+        DEFAULT_MESSAGES.put("msg_bind_bot_usage", "§e[QQBot] §f用法: /qqbot bind bot [验证码]\n§7请先在QQ私聊Bot发送 /bind bot 获取验证码");
+        DEFAULT_MESSAGES.put("msg_bind_server_already_bound", "§e[QQBot] §f您已绑定过服务器，如需换绑请联系管理员喵~");
+        DEFAULT_MESSAGES.put("msg_bind_server_pending", "§e[QQBot] §f您的绑定请求正在等待管理员审核，请耐心等待喵~");
+        DEFAULT_MESSAGES.put("msg_bind_server_existing_code", "§a[QQBot] §f您已有有效验证码: §e{code}\n§b请在QQ私聊或群聊@Bot 发送 /bind server {code}");
+        DEFAULT_MESSAGES.put("msg_bind_server_new_code", "§a[QQBot] §f您的服务器绑定验证码: §e{code}\n§b请在5分钟内在QQ私聊或群聊@Bot 发送 /bind server {code}\n§e绑定后数据将保存在服务器端喵~");
+        DEFAULT_MESSAGES.put("msg_unbind_info", "§e[QQBot] §f若想改变绑定QQ，请联系管理员喵~");
+        DEFAULT_MESSAGES.put("msg_admin_force_bound", "§a[QQBot] Force bound {player} to {qq} as Admin.");
+        DEFAULT_MESSAGES.put("msg_admin_error_player_not_found", "§c[QQBot] Error: Player not found!");
+        DEFAULT_MESSAGES.put("msg_admin_set_admin", "§a[QQBot] Success! Set existing bound player as Admin.");
+        DEFAULT_MESSAGES.put("msg_admin_preauthorized", "§a[QQBot] Pre-authorized OpenID as Admin: {target}");
+        DEFAULT_MESSAGES.put("msg_admin_remove_admin", "§a[QQBot] Success! Removed Admin: {target}");
+        DEFAULT_MESSAGES.put("msg_admin_not_found", "§c[QQBot] Target not found in Admin list.");
+        DEFAULT_MESSAGES.put("msg_admin_auto_accepted", "§a[QQBot] Found in pending! Auto-accepted and set Admin: {name}");
+        DEFAULT_MESSAGES.put("kick_cleaned", "§c[QQBot] §f您的QQ绑定已被管理员清除，您已被移出服务器\n§e如需重新进入，请再次进服绑定QQ喵~");
+    }
+
+    public static Component getMessage(String key, String... replacements) {
+        String msg = currentMessages.getOrDefault(key, DEFAULT_MESSAGES.getOrDefault(key, key));
+        for (int i = 0; i < replacements.length - 1; i += 2) {
+            msg = msg.replace(replacements[i], replacements[i + 1]);
+        }
+        return Component.literal(msg);
+    }
+
+    private static void generateDefaultMessageFile(Path path) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# AwaBot Message Configuration\n");
+        sb.append("# Modify the texts below. Use § for color codes and \\n for line breaks.\n");
+        sb.append("# Hot-reload: execute /qqbot reload in console after editing.\n");
+        sb.append("\n");
+        for (Map.Entry<String, String> entry : DEFAULT_MESSAGES.entrySet()) {
+            String comment = switch (entry.getKey()) {
+                case "kick_bind_required" -> "Kick message for unbound players";
+                case "kick_banned" -> "Kick message for banned QQ";
+                case "kick_multi_bind" -> "Kick message when QQ is bound to multiple accounts (prevent_multi_bind=1)";
+                case "kick_pending_admin" -> "Kick message while waiting for admin approval (safety=2)";
+                case "msg_bind_bot_sent" -> "/qqbot bind bot success";
+                case "msg_bind_bot_usage" -> "/qqbot bind bot help";
+                case "msg_bind_server_already_bound" -> "/qqbot bind server when already bound";
+                case "msg_bind_server_pending" -> "/qqbot bind server when pending approval";
+                case "msg_bind_server_existing_code" -> "/qqbot bind server when code still valid";
+                case "msg_bind_server_new_code" -> "/qqbot bind server new code generated";
+                case "msg_unbind_info" -> "/qqbot unbind info";
+                case "msg_admin_force_bound" -> "Console message: force bound ({player}, {qq})";
+                case "msg_admin_error_player_not_found" -> "Console message: player not found";
+                case "msg_admin_set_admin" -> "Console message: set existing bound player as admin";
+                case "msg_admin_preauthorized" -> "Console message: preauthorize OpenID as admin ({target})";
+                case "msg_admin_remove_admin" -> "Console message: admin removed ({target})";
+                case "msg_admin_not_found" -> "Console message: target not in admin list";
+                case "msg_admin_auto_accepted" -> "Console message: auto accepted from pending ({name})";
+                case "kick_cleaned" -> "Kick message when binding is cleared by admin (/qqbot clean)";
+                default -> "";
+            };
+            if (!comment.isEmpty()) {
+                sb.append("# ").append(comment).append("\n");
+            }
+            // 将值中的换行符转换为 \n 字面量
+            String value = entry.getValue().replace("\n", "\\n");
+            sb.append(entry.getKey()).append("=").append(value).append("\n");
+            sb.append("\n");
+        }
+        Files.writeString(path, sb.toString(), StandardCharsets.UTF_8);
+    }
+
+    private static void loadMessageProperties() {
+        Path path = FabricLoader.getInstance().getConfigDir().resolve("awabot_messages.properties");
+        if (!Files.exists(path)) {
+            try {
+                generateDefaultMessageFile(path);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        Properties props = new Properties();
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            props.load(reader);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        for (String key : DEFAULT_MESSAGES.keySet()) {
+            String val = props.getProperty(key);
+            if (val != null) {
+                // Properties.load 已经自动将 \n 转义为换行符
+                currentMessages.put(key, val);
+            } else {
+                currentMessages.put(key, DEFAULT_MESSAGES.get(key));
+            }
+        }
+    }
+
+    // ---------- 安全工具 ----------
+    private static String generateRandomPassword() {
+        byte[] b = new byte[24];
+        new SecureRandom().nextBytes(b);
+        // 24 字节 -> 32 个 URL-safe 字符，正好也是 32 字节 AES key
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+    }
+
+    private static final char[] CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
+
+    private static String newBindCode() {
+        SecureRandom random = new SecureRandom();
+        StringBuilder sb = new StringBuilder(8);
+        for (int i = 0; i < 8; i++) {
+            sb.append(CODE_ALPHABET[random.nextInt(CODE_ALPHABET.length)]);
+        }
+        return sb.toString();
+    }
+
+    private static String newBindCodeUnique() {
+        String code;
+        do {
+            code = newBindCode();
+        } while (codeToSession.containsKey(code));
+        return code;
+    }
+
+    private static final Map<String, Deque<Long>> submitHits = new ConcurrentHashMap<>();
+    private static final int MAX_SUBMIT_PER_MIN = 10;
+
+    private static boolean allowSubmit(String ip) {
+        long now = System.currentTimeMillis();
+        Deque<Long> q = submitHits.computeIfAbsent(ip, k -> new ArrayDeque<>());
+        synchronized (q) {
+            while (!q.isEmpty() && now - q.peekFirst() > 60_000L) q.pollFirst();
+            if (q.size() >= MAX_SUBMIT_PER_MIN) return false;
+            q.addLast(now);
+            return true;
+        }
+    }
+
+    private static final Object BIND_LOCK = new Object();
+
+    // ---------- 核心配置 ----------
+    private static void loadCoreProperties() {
+        Path propPath = FabricLoader.getInstance().getConfigDir().resolve("awabot.properties");
+        Properties props = new Properties();
+        if (Files.exists(propPath)) {
+            try (InputStream is = Files.newInputStream(propPath)) {
+                props.load(is);
+                serverPort = Integer.parseInt(props.getProperty("port", "25566"));
+                currentPassword = props.getProperty("password", currentPassword);
+                safety = Integer.parseInt(props.getProperty("safety", "0"));
+                preventMultiBind = Integer.parseInt(props.getProperty("prevent_multi_bind", "1"));
+                bindAddress = props.getProperty("bind_address", "127.0.0.1").trim();
+                if (bindAddress.isEmpty()) bindAddress = "127.0.0.1";
+            } catch (Exception e) { e.printStackTrace(); }
+            if (currentPassword == null || currentPassword.length() < 12 || "123456".equals(currentPassword)) {
+                weakPassword = true;
+                System.err.println("[AwaBot] 【危险】API 密码过弱（默认值或长度 < 12）。请修改 config/awabot.properties 的 password 后重启。");
+            }
+        } else {
+            // 生成默认核心配置文件（随机强密码，不再使用 123456）
+            currentPassword = generateRandomPassword();
+            props.setProperty("port", "25566");
+            props.setProperty("password", currentPassword);
+            props.setProperty("bind_address", "127.0.0.1");
+            props.setProperty("safety", "0");
+            props.setProperty("prevent_multi_bind", "1");
+            try (OutputStream os = Files.newOutputStream(propPath)) {
+                String comments = "=== AwaBot Core Configuration ===\n"
+                        + "# port: API Server Port (default 25566)\n"
+                        + "# bind_address: API listen address (default 127.0.0.1 = local only; use 0.0.0.0 for a remote Bot)\n"
+                        + "# password: API auth password & encryption key (randomly generated on first start)\n"
+                        + "# safety: 0=No bind needed, 1=Bind required, 2=Bind + Admin approval\n"
+                        + "# prevent_multi_bind: 0=Allow multiple binds per QQ, 1=One QQ one player";
+                props.store(new OutputStreamWriter(os, StandardCharsets.UTF_8), comments);
+            } catch (Exception e) { e.printStackTrace(); }
+            System.out.println("[AwaBot] 首次启动，已生成随机 API 密码: " + currentPassword);
+            System.out.println("[AwaBot] 请把它填入 QQ Bot 配置，并妥善保存本文件。");
+        }
+    }
+
     @Override
     public void onInitializeServer() {
-        loadProperties();
+        loadCoreProperties();
+        loadMessageProperties();
         loadJsonConfig();
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
@@ -123,28 +313,26 @@ public class AwaBot implements DedicatedServerModInitializer {
                             String timeStr = expireTime == -1 ? "永久" : new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date(expireTime));
                             server.execute(() -> {
                                 if (player.connection != null) {
-                                    player.connection.disconnect(Component.literal("§c您关联的QQ已被服务器封禁！\n§f解封时间: " + timeStr));
+                                    player.connection.disconnect(getMessage("kick_banned", "{time}", timeStr));
                                 }
                             });
-                            return; // 确保被封禁玩家直接结束逻辑
+                            return;
                         }
                     }
 
-                    // --- 新增：制裁中途开启“一对一限制”产生的历史多绑账号 ---
                     if (preventMultiBind == 1 && playerBinds.get(boundQQ) != null && playerBinds.get(boundQQ).size() > 1) {
                         server.execute(() -> {
                             if (player.connection != null) {
-                                player.connection.disconnect(Component.literal("§c服务器已开启QQ一对一绑定模式喵！\n§f检测到您的QQ绑定了多个角色，已被系统拦截。\n§e请联系管理员使用 /clean 清理多余的绑定记录~"));
+                                player.connection.disconnect(getMessage("kick_multi_bind"));
                             }
                         });
-                        return; // 拦截并踢出
+                        return;
                     }
-                    // --------------------------------------------------------
 
-                    return; // 核心修复：只要绑过了、没被封、且符合绑定数量限制，直接放行进入游戏！
+                    return;
                 }
 
-                // 3. 只有【未绑定】的玩家才会进入这里的发码和拦截逻辑
+                // 3. 未绑定玩家处理
                 boolean isPendingAdmin = false;
                 synchronized (pendingAdminApprovals) {
                     for (BindSession s : pendingAdminApprovals) {
@@ -158,7 +346,7 @@ public class AwaBot implements DedicatedServerModInitializer {
                 if (isPendingAdmin) {
                     server.execute(() -> {
                         if (player.connection != null)
-                            player.connection.disconnect(Component.literal("§e您的绑定请求正在等待管理员审核，请稍后再试或联系管理员"));
+                            player.connection.disconnect(getMessage("kick_pending_admin"));
                     });
                     return;
                 }
@@ -173,24 +361,14 @@ public class AwaBot implements DedicatedServerModInitializer {
                 }
 
                 if (code == null) {
-                    SecureRandom random = new SecureRandom();
-                    code = String.format("%04d", random.nextInt(10000));
-                    while (codeToSession.containsKey(code)) {
-                        code = String.format("%04d", random.nextInt(10000));
-                    }
+                    code = newBindCodeUnique();
                     codeToSession.put(code, new BindSession(name, uuid, code));
                 }
 
                 String finalCode = code;
                 server.execute(() -> {
                     if (player.connection != null) {
-                        player.connection.disconnect(Component.literal(
-                                "§c您需要绑定QQ才能进入\n" +
-                                        "§f绑定码 [§e" + finalCode + "§f]\n" +
-                                        "§b请在5min内私聊或群聊@Bot 并发送 /bind server " + finalCode + "\n" +
-                                        "§e绑定后即可进入服务器~\n" +
-                                        "§e该qq会与服务器绑定，不是与bot绑定"
-                        ));
+                        player.connection.disconnect(getMessage("kick_bind_required", "{code}", finalCode));
                     }
                 });
             }
@@ -198,6 +376,18 @@ public class AwaBot implements DedicatedServerModInitializer {
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(Commands.literal("qqbot")
+                    .then(Commands.literal("clean")
+                            .requires(source -> source.getEntity() == null) // 仅控制台
+                            .then(Commands.argument("player", StringArgumentType.string())
+                                    .executes(context -> {
+                                        String target = StringArgumentType.getString(context, "player");
+                                        if (performClean(target)) {
+                                            context.getSource().sendSystemMessage(Component.literal("§a[QQBot] Binding cleared, player kicked, Admin revoked for: " + target));
+                                        } else {
+                                            context.getSource().sendSystemMessage(Component.literal("§c[QQBot] No binding found for: " + target));
+                                        }
+                                        return 1;
+                                    })))
                     .then(Commands.literal("admin")
                             .requires(source -> source.getEntity() == null)
                             .then(Commands.argument("target", StringArgumentType.string())
@@ -230,7 +420,7 @@ public class AwaBot implements DedicatedServerModInitializer {
                                                 }
 
                                                 if (uuid == null) {
-                                                    context.getSource().sendSystemMessage(Component.literal("[QQBot] Error: Player not found!"));
+                                                    context.getSource().sendSystemMessage(getMessage("msg_admin_error_player_not_found"));
                                                     return 0;
                                                 }
 
@@ -243,25 +433,23 @@ public class AwaBot implements DedicatedServerModInitializer {
                                                 codeToSession.entrySet().removeIf(e -> e.getValue().uuid.equals(uuid));
 
                                                 saveJsonConfig();
-                                                context.getSource().sendSystemMessage(Component.literal("[QQBot] Force bound " + targetName + " to " + forceQQ + " as Admin."));
+                                                context.getSource().sendSystemMessage(getMessage("msg_admin_force_bound", "{player}", targetName, "{qq}", forceQQ));
                                                 return 1;
                                             }))
                                     .executes(context -> {
                                         final String target = StringArgumentType.getString(context, "target");
                                         boolean handled = false;
 
-                                        // 1. 查已绑定的玩家表
                                         for (Map.Entry<String, List<BoundPlayer>> entry : playerBinds.entrySet()) {
                                             if (entry.getValue().stream().anyMatch(bp -> bp.name().equalsIgnoreCase(target))) {
                                                 explicitAdmins.add(entry.getKey());
                                                 saveJsonConfig();
-                                                context.getSource().sendSystemMessage(Component.literal("[QQBot] Success! Set existing bound player as Admin."));
+                                                context.getSource().sendSystemMessage(getMessage("msg_admin_set_admin"));
                                                 handled = true;
                                                 break;
                                             }
                                         }
 
-                                        // 2. 查待审核列表捞人
                                         if (!handled) {
                                             synchronized (pendingAdminApprovals) {
                                                 Iterator<BindSession> it = pendingAdminApprovals.iterator();
@@ -273,7 +461,7 @@ public class AwaBot implements DedicatedServerModInitializer {
                                                         it.remove();
                                                         codeToSession.entrySet().removeIf(e -> e.getValue().uuid.equals(s.uuid));
                                                         saveJsonConfig();
-                                                        context.getSource().sendSystemMessage(Component.literal("[QQBot] Found in pending! Auto-accepted and set Admin: " + s.name));
+                                                        context.getSource().sendSystemMessage(getMessage("msg_admin_auto_accepted", "{name}", s.name));
                                                         handled = true;
                                                         break;
                                                     }
@@ -281,11 +469,10 @@ public class AwaBot implements DedicatedServerModInitializer {
                                             }
                                         }
 
-                                        // 3. 都没找到，视为 QQ OpenID 预授权
                                         if (!handled) {
                                             explicitAdmins.add(target);
                                             saveJsonConfig();
-                                            context.getSource().sendSystemMessage(Component.literal("[QQBot] Pre-authorized OpenID as Admin: " + target));
+                                            context.getSource().sendSystemMessage(getMessage("msg_admin_preauthorized", "{target}", target));
                                         }
                                         return 1;
                                     })))
@@ -303,14 +490,13 @@ public class AwaBot implements DedicatedServerModInitializer {
                                         }
                                         if (explicitAdmins.remove(targetQQ)) {
                                             saveJsonConfig();
-                                            context.getSource().sendSystemMessage(Component.literal("[QQBot] Success! Removed Admin: " + targetQQ));
+                                            context.getSource().sendSystemMessage(getMessage("msg_admin_remove_admin", "{target}", targetQQ));
                                         } else {
-                                            context.getSource().sendSystemMessage(Component.literal("[QQBot] Target not found in Admin list."));
+                                            context.getSource().sendSystemMessage(getMessage("msg_admin_not_found"));
                                         }
                                         return 1;
                                     })))
                     .then(Commands.literal("bind")
-                            // /qqbot bind bot [验证码] - 快捷绑定，对应bot的/bind bot
                             .then(Commands.literal("bot")
                                     .then(Commands.argument("code", StringArgumentType.string())
                                             .executes(context -> {
@@ -318,18 +504,17 @@ public class AwaBot implements DedicatedServerModInitializer {
                                                 ServerPlayer player = context.getSource().getPlayer();
                                                 if (player != null) {
                                                     pendingBinds.put(player.getName().getString(), code);
-                                                    context.getSource().sendSystemMessage(Component.literal("§a[QQBot] §f快捷绑定已发送到 Bot，请稍候数据同步~"));
+                                                    context.getSource().sendSystemMessage(getMessage("msg_bind_bot_sent"));
                                                 }
                                                 return 1;
                                             }))
                                     .executes(context -> {
                                         ServerPlayer player = context.getSource().getPlayer();
                                         if (player != null) {
-                                            context.getSource().sendSystemMessage(Component.literal("§e[QQBot] §f用法: /qqbot bind bot [验证码]\n§7请先在QQ私聊Bot发送 /bind bot 获取验证码"));
+                                            context.getSource().sendSystemMessage(getMessage("msg_bind_bot_usage"));
                                         }
                                         return 1;
                                     }))
-                            // /qqbot bind server - 生成验证码，用于服务器端绑定
                             .then(Commands.literal("server")
                                     .executes(context -> {
                                         ServerPlayer player = context.getSource().getPlayer();
@@ -338,7 +523,6 @@ public class AwaBot implements DedicatedServerModInitializer {
                                         String uuid = player.getStringUUID();
                                         String name = player.getName().getString();
 
-                                        // 检查是否已经绑定到服务器
                                         boolean alreadyBound = false;
                                         for (Map.Entry<String, List<BoundPlayer>> entry : playerBinds.entrySet()) {
                                             if (entry.getValue().stream().anyMatch(bp -> bp.uuid().equals(uuid))) {
@@ -348,75 +532,109 @@ public class AwaBot implements DedicatedServerModInitializer {
                                         }
 
                                         if (alreadyBound) {
-                                            context.getSource().sendSystemMessage(Component.literal("§e[QQBot] §f您已绑定过服务器，如需换绑请联系管理员喵~"));
+                                            context.getSource().sendSystemMessage(getMessage("msg_bind_server_already_bound"));
                                             return 1;
                                         }
 
-                                        // 检查是否在待审核列表中
                                         synchronized (pendingAdminApprovals) {
                                             for (BindSession s : pendingAdminApprovals) {
                                                 if (s.uuid.equals(uuid)) {
-                                                    context.getSource().sendSystemMessage(Component.literal("§e[QQBot] §f您的绑定请求正在等待管理员审核，请耐心等待喵~"));
+                                                    context.getSource().sendSystemMessage(getMessage("msg_bind_server_pending"));
                                                     return 1;
                                                 }
                                             }
                                         }
 
-                                        // 清理过期验证码
                                         codeToSession.entrySet().removeIf(e -> e.getValue().expireTime < System.currentTimeMillis());
 
-                                        // 检查是否已有未过期的验证码
                                         for (Map.Entry<String, BindSession> entry : codeToSession.entrySet()) {
                                             if (entry.getValue().uuid.equals(uuid)) {
                                                 String existingCode = entry.getKey();
-                                                context.getSource().sendSystemMessage(Component.literal(
-                                                        "§a[QQBot] §f您已有有效验证码: §e" + existingCode + "\n" +
-                                                                "§b请在QQ私聊或群聊@Bot 发送 /bind server " + existingCode
-                                                ));
+                                                context.getSource().sendSystemMessage(getMessage("msg_bind_server_existing_code", "{code}", existingCode));
                                                 return 1;
                                             }
                                         }
 
-                                        // 生成新验证码
-                                        SecureRandom random = new SecureRandom();
-                                        String code;
-                                        do {
-                                            code = String.format("%04d", random.nextInt(10000));
-                                        } while (codeToSession.containsKey(code));
-
+                                        String code = newBindCodeUnique();
                                         codeToSession.put(code, new BindSession(name, uuid, code));
 
-                                        context.getSource().sendSystemMessage(Component.literal(
-                                                "§a[QQBot] §f您的服务器绑定验证码: §e" + code + "\n" +
-                                                        "§b请在5分钟内在QQ私聊或群聊@Bot 发送 /bind server " + code + "\n" +
-                                                        "§e绑定后数据将保存在服务器端喵~"
-                                        ));
-
+                                        context.getSource().sendSystemMessage(getMessage("msg_bind_server_new_code", "{code}", code));
                                         return 1;
                                     })))
                     .then(Commands.literal("unbind")
                             .executes(context -> {
                                 ServerPlayer player = context.getSource().getPlayer();
                                 if (player != null) {
-                                    context.getSource().sendSystemMessage(Component.literal("§e[QQBot] §f若想改变绑定QQ，请联系管理员喵~"));
+                                    context.getSource().sendSystemMessage(getMessage("msg_unbind_info"));
                                 }
+                                return 1;
+                            }))
+                    .then(Commands.literal("help")
+                            .executes(context -> {
+                                context.getSource().sendSystemMessage(Component.literal("§a========== QQBot Commands =========="));
+                                context.getSource().sendSystemMessage(Component.literal("§e/qqbot help §7- Show this help"));
+                                context.getSource().sendSystemMessage(Component.literal("§e/qqbot bind bot [code] §7- Verify/link your QQ in-game (code from QQ Bot)"));
+                                context.getSource().sendSystemMessage(Component.literal("§e/qqbot bind server §7- Get a code to bind your QQ to this server"));
+                                context.getSource().sendSystemMessage(Component.literal("§e/qqbot unbind §7- Show info about changing your bound QQ"));
+                                context.getSource().sendSystemMessage(Component.literal("§e/qqbot admin <player> [qq] §7- (Console) Set/force-bind a player as Admin"));
+                                context.getSource().sendSystemMessage(Component.literal("§e/qqbot unadmin <player/qq> §7- (Console) Remove an Admin"));
+                                context.getSource().sendSystemMessage(Component.literal("§e/qqbot clean <player/qq> §7- (Console) Clear binding, kick player & revoke Admin"));
+                                context.getSource().sendSystemMessage(Component.literal("§e/qqbot reload §7- (Console) Reload message config"));
+                                return 1;
+                            }))
+                    .then(Commands.literal("reload")
+                            .requires(source -> source.getEntity() == null) // 仅控制台
+                            .executes(context -> {
+                                // 检查核心配置是否变化
+                                Path corePath = FabricLoader.getInstance().getConfigDir().resolve("awabot.properties");
+                                if (!Files.exists(corePath)) {
+                                    context.getSource().sendSystemMessage(Component.literal("§c[QQBot] Core config file not found. Cannot hot-reload."));
+                                    return 0;
+                                }
+                                Properties coreProps = new Properties();
+                                try (Reader reader = Files.newBufferedReader(corePath)) {
+                                    coreProps.load(reader);
+                                } catch (IOException e) {
+                                    context.getSource().sendSystemMessage(Component.literal("§c[QQBot] Failed to read core config."));
+                                    return 0;
+                                }
+                                int newSafety = Integer.parseInt(coreProps.getProperty("safety", String.valueOf(safety)));
+                                int newPrevent = Integer.parseInt(coreProps.getProperty("prevent_multi_bind", String.valueOf(preventMultiBind)));
+                                int newPort = Integer.parseInt(coreProps.getProperty("port", String.valueOf(serverPort)));
+                                String newPassword = coreProps.getProperty("password", currentPassword);
+                                String newBind = coreProps.getProperty("bind_address", bindAddress).trim();
+                                if (newSafety != safety || newPrevent != preventMultiBind || newPort != serverPort
+                                        || !newPassword.equals(currentPassword) || !newBind.equals(bindAddress)) {
+                                    context.getSource().sendSystemMessage(Component.literal("§c[QQBot] 检测到 safety, prevent_multi_bind, port, bind_address 或 password 发生变更！这些修改需要重启服务器才能生效，本次热加载已取消。"));
+                                    return 0;
+                                }
+
+                                // 重载消息文件
+                                loadMessageProperties();
+                                context.getSource().sendSystemMessage(Component.literal("§a[QQBot] 消息配置已热加载成功。"));
                                 return 1;
                             }))
             );
         });
     }
 
+    // ---------- HTTP 服务器及相关方法 ----------
     private void startHttpServer() {
+        if (weakPassword) {
+            System.err.println("[AwaBot] 出于安全考虑，拒绝以弱密码启动 API 服务。请修改 config/awabot.properties 的 password 后重启。");
+            return;
+        }
         try {
-            httpServer = HttpServer.create(new InetSocketAddress(serverPort), 0);
+            InetSocketAddress endpoint = new InetSocketAddress(InetAddress.getByName(bindAddress), serverPort);
+            httpServer = HttpServer.create(endpoint, 0);
             httpServer.createContext("/api/server", new ApiHandler("server"));
             httpServer.createContext("/api/tps", new ApiHandler("tps"));
             httpServer.createContext("/api/player", new ApiHandler("player"));
             httpServer.createContext("/api/action", new ApiHandler("action"));
             httpServer.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
             httpServer.start();
-            System.out.println("[AwaBot] API Server started on port " + serverPort);
-        } catch (IOException e) { e.printStackTrace(); }
+            System.out.println("[AwaBot] API Server started on http://" + bindAddress + ":" + serverPort);
+        } catch (Exception e) { e.printStackTrace(); }
     }
 
     static class ApiHandler implements HttpHandler {
@@ -426,7 +644,10 @@ public class AwaBot implements DedicatedServerModInitializer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             String auth = exchange.getRequestHeaders().getFirst("Authorization");
-            if (auth == null || !auth.trim().equals(currentPassword)) {
+            String token = auth == null ? null : auth.trim();
+            if (token == null || !MessageDigest.isEqual(
+                    token.getBytes(StandardCharsets.UTF_8),
+                    currentPassword.getBytes(StandardCharsets.UTF_8))) {
                 sendResponse(exchange, 401, "{\"error\":\"401 Unauthorized\"}");
                 return;
             }
@@ -447,6 +668,11 @@ public class AwaBot implements DedicatedServerModInitializer {
                         String action = params.getOrDefault("action", "");
 
                         if ("submit_code".equals(action)) {
+                            String remoteIp = exchange.getRemoteAddress().getAddress() == null
+                                    ? "unknown" : exchange.getRemoteAddress().getAddress().getHostAddress();
+                            if (!allowSubmit(remoteIp)) {
+                                yield "{\"error\":\"Too many attempts, please retry later\"}";
+                            }
                             String qq = params.get("qq");
                             String code = params.get("code");
                             if (qq == null || code == null) yield "{\"error\":\"Missing qq or code\"}";
@@ -516,7 +742,6 @@ public class AwaBot implements DedicatedServerModInitializer {
                             if (accepted > 0) saveJsonConfig();
                             yield "{\"status\":\"success\",\"accepted\":" + accepted + "}";
                         } else if ("refuse".equals(action)) {
-                            // --- 修改：支持按序号或 all 拒绝申请（与 accept 逻辑对齐） ---
                             String target = params.get("target");
                             int refused = 0;
                             synchronized (pendingAdminApprovals) {
@@ -534,33 +759,10 @@ public class AwaBot implements DedicatedServerModInitializer {
                                 }
                             }
                             yield "{\"status\":\"success\",\"refused\":" + refused + "}";
-
                         } else if ("clean".equals(action)) {
-                            // --- 修改：将原 refuse 逻辑重命名为 clean，用于清理指定玩家的历史绑定 ---
                             String target = params.get("target");
-                            boolean removed = false;
-
-                            // 顺便把处于申请列表里的该玩家/QQ也清理掉
-                            synchronized (pendingAdminApprovals) {
-                                removed = pendingAdminApprovals.removeIf(s -> s.name.equalsIgnoreCase(target) || s.qq.equals(target));
-                            }
-
-                            // 清理已绑定列表
-                            for (Iterator<Map.Entry<String, List<BoundPlayer>>> it = playerBinds.entrySet().iterator(); it.hasNext();) {
-                                Map.Entry<String, List<BoundPlayer>> entry = it.next();
-                                if (entry.getKey().equals(target)) { // 如果 target 是 QQ 号，直接解绑该QQ下所有玩家
-                                    it.remove();
-                                    removed = true;
-                                } else { // 如果 target 是玩家名，解绑特定玩家
-                                    if (entry.getValue().removeIf(bp -> bp.name().equalsIgnoreCase(target))) {
-                                        removed = true;
-                                        if (entry.getValue().isEmpty()) it.remove(); // 如果QQ下没绑玩家了，把这行数据干掉
-                                    }
-                                }
-                            }
-                            if (removed) { saveJsonConfig(); yield "{\"status\":\"success\"}"; }
+                            if (performClean(target)) { yield "{\"status\":\"success\"}"; }
                             else yield "{\"error\":\"Not found\"}";
-
                         } else if ("ban".equals(action)) {
                             String target = params.get("target");
                             String hoursStr = params.get("hours");
@@ -597,11 +799,8 @@ public class AwaBot implements DedicatedServerModInitializer {
                         String targetInput = parseQuery(query).getOrDefault("name", "");
                         if (targetInput.isEmpty()) yield "{\"error\":\"Empty Name\"}";
 
-                        // 收集所有可能的玩家名字源
                         Set<String> allNames = new HashSet<>();
-                        // 1. 在线玩家
                         mcServer.getPlayerList().getPlayers().forEach(p -> allNames.add(p.getName().getString()));
-                        // 2. 缓存玩家 (usercache)
                         Path cachePath = mcServer.getServerDirectory().resolve("usercache.json");
                         if (Files.exists(cachePath)) {
                             try (Reader reader = Files.newBufferedReader(cachePath, StandardCharsets.UTF_8)) {
@@ -612,10 +811,8 @@ public class AwaBot implements DedicatedServerModInitializer {
                                 });
                             } catch (Exception ignored) {}
                         }
-                        // 3. 已绑定玩家
                         playerBinds.values().forEach(list -> list.forEach(bp -> allNames.add(bp.name())));
 
-                        // 开始搜索
                         List<String> exactMatches = new ArrayList<>();
                         List<String> containsMatches = new ArrayList<>();
                         String lowerInput = targetInput.toLowerCase();
@@ -629,13 +826,10 @@ public class AwaBot implements DedicatedServerModInitializer {
                         }
 
                         if (!exactMatches.isEmpty()) {
-                            // 优先返回完全匹配
                             yield getPlayerStatsByName(exactMatches.get(0));
                         } else if (containsMatches.size() == 1) {
-                            // 只有一个模糊匹配，直接返回
                             yield getPlayerStatsByName(containsMatches.get(0));
                         } else if (containsMatches.size() > 1) {
-                            // 找到多个模糊匹配，返回列表让用户选
                             yield GSON.toJson(new PlayerStatsResponse("Multiple", 0, 0, 0, 0, 0, 0, containsMatches));
                         } else {
                             yield "{\"error\":\"Player Not Found\"}";
@@ -681,7 +875,6 @@ public class AwaBot implements DedicatedServerModInitializer {
                 if (targetUuid == null) return "{\"error\":\"Player Not Found\"}";
 
                 Path worldPath = mcServer.getWorldPath(LevelResource.ROOT);
-                // 兼容不同版本的统计数据存放路径
                 Path statsPath = worldPath.resolve("stats").resolve(targetUuid + ".json");
                 if (!Files.exists(statsPath)) {
                     statsPath = worldPath.resolve("players").resolve("stats").resolve(targetUuid + ".json");
@@ -718,7 +911,7 @@ public class AwaBot implements DedicatedServerModInitializer {
 
             } catch (Exception e) {
                 e.printStackTrace();
-                return "{\"error\":\"Internal Error: " + e.getMessage() + "\"}";
+                return "{\"error\":\"Internal Error\"}";
             }
         }
 
@@ -754,17 +947,37 @@ public class AwaBot implements DedicatedServerModInitializer {
         return map;
     }
 
+    // v2 载荷信封: MAGIC(4) + PBKDF2 迭代次数(4, 大端) + salt(16) + iv(12) + AES-GCM 密文||tag
+    private static final byte[] BLOB_MAGIC_V2 = {'A', 'W', '0', '2'};
+    private static final int PBKDF2_ITERATIONS = 120_000;
+    private static final int PBKDF2_SALT_LEN = 16;
+
+    private static SecretKeySpec deriveKey(String password, byte[] salt, int iterations) throws Exception {
+        PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, iterations, 256);
+        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        return new SecretKeySpec(factory.generateSecret(spec).getEncoded(), "AES");
+    }
+
     private static String encrypt(String data, String key) throws Exception {
+        SecureRandom random = new SecureRandom();
+        byte[] salt = new byte[PBKDF2_SALT_LEN];
         byte[] iv = new byte[12];
-        new SecureRandom().nextBytes(iv);
-        byte[] keyBytes = Arrays.copyOf(key.getBytes(StandardCharsets.UTF_8), 32);
-        SecretKeySpec secretKey = new SecretKeySpec(keyBytes, "AES");
+        random.nextBytes(salt);
+        random.nextBytes(iv);
+        SecretKeySpec secretKey = deriveKey(key, salt, PBKDF2_ITERATIONS);
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.ENCRYPT_MODE, secretKey, new GCMParameterSpec(128, iv));
         byte[] cipherText = cipher.doFinal(data.getBytes(StandardCharsets.UTF_8));
-        byte[] combined = new byte[iv.length + cipherText.length];
-        System.arraycopy(iv, 0, combined, 0, iv.length);
-        System.arraycopy(cipherText, 0, combined, iv.length, cipherText.length);
+        byte[] combined = new byte[BLOB_MAGIC_V2.length + 4 + salt.length + iv.length + cipherText.length];
+        int p = 0;
+        System.arraycopy(BLOB_MAGIC_V2, 0, combined, p, BLOB_MAGIC_V2.length); p += BLOB_MAGIC_V2.length;
+        combined[p++] = (byte) (PBKDF2_ITERATIONS >>> 24);
+        combined[p++] = (byte) (PBKDF2_ITERATIONS >>> 16);
+        combined[p++] = (byte) (PBKDF2_ITERATIONS >>> 8);
+        combined[p++] = (byte) PBKDF2_ITERATIONS;
+        System.arraycopy(salt, 0, combined, p, salt.length); p += salt.length;
+        System.arraycopy(iv, 0, combined, p, iv.length); p += iv.length;
+        System.arraycopy(cipherText, 0, combined, p, cipherText.length);
         return Base64.getEncoder().encodeToString(combined);
     }
 
@@ -773,36 +986,6 @@ public class AwaBot implements DedicatedServerModInitializer {
         long gap = tickTimes[prev] - tickTimes[tickIndex];
         if (gap <= 0) return 20.0;
         return Math.min(20.0, 1000.0 / ((double) gap / 100.0));
-    }
-
-    private void loadProperties() {
-        Path propPath = FabricLoader.getInstance().getConfigDir().resolve("awabot.properties");
-        Properties props = new Properties();
-        if (Files.exists(propPath)) {
-            try (InputStream is = Files.newInputStream(propPath)) {
-                props.load(is);
-                serverPort = Integer.parseInt(props.getProperty("port", "25566"));
-                currentPassword = props.getProperty("password", currentPassword);
-                safety = Integer.parseInt(props.getProperty("safety", "0"));
-                preventMultiBind = Integer.parseInt(props.getProperty("prevent_multi_bind", "1"));
-            } catch (Exception e) { e.printStackTrace(); }
-        } else {
-            // 这里是初始化配置的地方
-            props.setProperty("port", "25566");
-            props.setProperty("password", currentPassword);
-            props.setProperty("safety", "0");
-            props.setProperty("prevent_multi_bind", "1");
-
-            try (OutputStream os = Files.newOutputStream(propPath)) {
-                String comments = "=== AwaBot Configuration ===\n" +
-                        "# port: API Server Port (default 25566)\n" +
-                        "# password: API encryption password (recommend 32 chars)\n" +
-                        "# safety: 0=No bind needed, 1=Bind required, 2=Bind + Admin approval\n" +
-                        "# prevent_multi_bind: 0=Allow multiple binds per QQ, 1=One QQ one player";
-
-                props.store(new OutputStreamWriter(os, StandardCharsets.UTF_8), comments);
-            } catch (Exception e) { e.printStackTrace(); }
-        }
     }
 
     private void loadJsonConfig() {
@@ -815,7 +998,7 @@ public class AwaBot implements DedicatedServerModInitializer {
                 JsonObject bindsObj = root.getAsJsonObject("binds");
                 for (String qq : bindsObj.keySet()) {
                     List<BoundPlayer> list = GSON.fromJson(bindsObj.get(qq), new TypeToken<List<BoundPlayer>>(){}.getType());
-                    playerBinds.put(qq, list);
+                    if (list != null) playerBinds.put(qq, new CopyOnWriteArrayList<>(list));
                 }
             }
             if (root.has("explicit_admins"))
@@ -833,10 +1016,96 @@ public class AwaBot implements DedicatedServerModInitializer {
     }
 
     private static void bindPlayerLogic(String qq, String playerName, String uuid) {
-        playerBinds.values().forEach(list -> list.removeIf(bp -> bp.uuid().equals(uuid)));
-        playerBinds.values().removeIf(List::isEmpty);
-        List<BoundPlayer> qqBinds = playerBinds.computeIfAbsent(qq, k -> new ArrayList<>());
-        if (preventMultiBind == 1) qqBinds.clear();
-        qqBinds.add(new BoundPlayer(playerName, uuid));
+        synchronized (BIND_LOCK) {
+            playerBinds.values().forEach(list -> list.removeIf(bp -> bp.uuid().equals(uuid)));
+            playerBinds.values().removeIf(List::isEmpty);
+            List<BoundPlayer> qqBinds = playerBinds.computeIfAbsent(qq, k -> new CopyOnWriteArrayList<>());
+            if (preventMultiBind == 1) qqBinds.clear();
+            qqBinds.add(new BoundPlayer(playerName, uuid));
+        }
+    }
+    // ---------- 统一 clean 逻辑：清绑定 + 踢出玩家 + 收回该 QQ 的 admin ----------
+    private static ServerPlayer findOnlinePlayerByUuid(String uuid) {
+        if (mcServer == null) return null;
+        for (ServerPlayer p : mcServer.getPlayerList().getPlayers()) {
+            if (p.getStringUUID().equals(uuid)) return p;
+        }
+        return null;
+    }
+
+    private static boolean performClean(String target) {
+        // 0) 先解析 target 关联的 QQ（target 可能是 QQ 号，也可能是绑定的玩家名）
+        String affectedQQ = null;
+        if (playerBinds.containsKey(target)) {
+            affectedQQ = target;
+        } else {
+            outer:
+            for (Map.Entry<String, List<BoundPlayer>> entry : playerBinds.entrySet()) {
+                for (BoundPlayer bp : entry.getValue()) {
+                    if (bp.name().equalsIgnoreCase(target)) {
+                        affectedQQ = entry.getKey();
+                        break outer;
+                    }
+                }
+            }
+        }
+
+        // 1) 踢出在线的受影响玩家（务必在删绑定之前收集 uuid，之后映射就没了）
+        List<String> uuidsToKick = new ArrayList<>();
+        if (playerBinds.containsKey(target)) {
+            playerBinds.get(target).forEach(bp -> uuidsToKick.add(bp.uuid()));
+        } else {
+            for (List<BoundPlayer> list : playerBinds.values()) {
+                for (BoundPlayer bp : list) {
+                    if (bp.name().equalsIgnoreCase(target)) uuidsToKick.add(bp.uuid());
+                }
+            }
+        }
+        if (affectedQQ != null) {
+            synchronized (pendingAdminApprovals) {
+                for (BindSession s : pendingAdminApprovals) {
+                    if (s.qq != null && s.qq.equals(affectedQQ)) uuidsToKick.add(s.uuid);
+                }
+            }
+        }
+        for (String uuid : uuidsToKick) {
+            final ServerPlayer online = findOnlinePlayerByUuid(uuid);
+            if (online != null) {
+                // 断连必须在服务器主线程执行，与 JOIN 里的踢人写法一致
+                mcServer.execute(() -> {
+                    if (online.connection != null) {
+                        online.connection.disconnect(getMessage("kick_cleaned"));
+                    }
+                });
+            }
+        }
+
+        boolean removed = false;
+
+        // 2) 清绑定（兼容“按 QQ 删整条 / 按玩家名删一条”两种 target，逻辑与原有 HTTP clean 相同）
+        for (Iterator<Map.Entry<String, List<BoundPlayer>>> it = playerBinds.entrySet().iterator(); it.hasNext();) {
+            Map.Entry<String, List<BoundPlayer>> entry = it.next();
+            if (entry.getKey().equals(target)) {
+                it.remove();
+                removed = true;
+            } else if (entry.getValue().removeIf(bp -> bp.name().equalsIgnoreCase(target))) {
+                removed = true;
+                if (entry.getValue().isEmpty()) it.remove();
+            }
+        }
+
+        // 3) 清待审核记录
+        synchronized (pendingAdminApprovals) {
+            removed = pendingAdminApprovals.removeIf(s -> s.name.equalsIgnoreCase(target)
+                    || (s.qq != null && s.qq.equals(target))) || removed;
+        }
+
+        // 4) 检查该 QQ 是否有 bot admin，有则一并收回
+        if (affectedQQ != null && explicitAdmins.remove(affectedQQ)) {
+            removed = true;
+        }
+
+        if (removed) saveJsonConfig();
+        return removed;
     }
 }

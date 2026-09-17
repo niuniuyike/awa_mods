@@ -3,9 +3,13 @@ package top.msu333;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 
 import java.io.IOException;
@@ -61,6 +65,26 @@ public class MotdAwa implements ModInitializer {
                     updateMotd();
                 }
             }
+        });
+
+        // 注册 /motd reload 命令（适配 Mojang 映射）
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            dispatcher.register(Commands.literal("motd")
+                    .then(Commands.literal("reload")
+                            .executes(context -> {
+                                loadConfig();
+                                if (server != null) {
+                                    updateMotd();
+                                }
+                                int count = config.motdList != null ? config.motdList.size() : 0;
+                                context.getSource().sendSuccess(
+                                        () -> Component.literal("§a[MotdAwa] 配置已刷新！当前共 " + count + " 条 MOTD"),
+                                        false
+                                );
+                                return 1;
+                            })
+                    )
+            );
         });
 
         System.out.println("§a[MotdAwa] 动态 MOTD 已启用！每 " + config.updateIntervalSeconds + " 秒自动随机更换一次");

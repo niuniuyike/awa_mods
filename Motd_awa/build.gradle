@@ -2,7 +2,7 @@ plugins {
     id 'net.fabricmc.fabric-loom' version '1.15-SNAPSHOT'
 }
 
-version = "1.2"
+version = "2.5"
 group = "top.msu333"
 
 base {

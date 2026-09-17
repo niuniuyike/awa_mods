@@ -13,7 +13,8 @@ import java.nio.file.Path;
 
 public class WelcomeConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger("WelcomeMod");
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    // 唯一修改：添加 .disableHtmlEscaping() 防止 & 被转义为 \u0026
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("welcome-mod.json");
 
     private String welcomeMessage = "&a欢迎 &e%player% &a加入服务器！\n&6&l>>&r &b祝你游戏愉快 &6&l<<";

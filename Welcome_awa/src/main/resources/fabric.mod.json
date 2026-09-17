@@ -3,7 +3,7 @@
   "id": "welcome-mod",
   "version": "${version}",
   "name": "Welcome Mod",
-  "description": "A simple welcome mod for Minecraft 26.1",
+  "description": "A simple welcome mod for Minecraft 26.3",
   "authors": [
     "Nanyu"
   ],
@@ -19,7 +19,7 @@
   "mixins": [],
   "depends": {
     "fabricloader": ">=0.18.4",
-    "minecraft": "26.1.2",
+    "minecraft": "26.3",
     "java": ">=25"
   }
 }

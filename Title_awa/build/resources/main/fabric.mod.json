@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "title-mod",
+  "version": "2.5",
+  "name": "Welcome AWA",
+  "description": "Add AFK prefix to players' name tags and tab list.",
+  "authors": ["niuniuyike_awa"],
+  "contact": {},
+  "license": "MIT",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "top.msu333.title.TitleMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "26.3",
+    "fabric-api": ">=0.152.1"
+  }
+}

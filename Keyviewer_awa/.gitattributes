@@ -1,0 +1,14 @@
+# 保证 gradlew / gradlew.bat 在不同系统上都能用
+*.bat text eol=crlf
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+
+# 统一按文本处理
+*.java text
+*.gradle text
+*.json text
+*.md text
+
+# 二进制
+*.jar binary
+*.png binary

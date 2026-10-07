@@ -1,0 +1,28 @@
+{
+	"schemaVersion": 1,
+	"id": "awa_keyviewer",
+	"version": "${version}",
+	"name": "AWA KeyViewer",
+	"description": "Ingame key viewer HUD: shows WASD, mouse buttons and spacebar while you play. The HUD sways with your mouse movement. Configure with /awakeyviewer.",
+	"authors": [
+		"AWA"
+	],
+	"contact": {},
+	"license": "MIT",
+	"icon": "assets/awa_keyviewer/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"com.awa.keyviewer.KeyViewerMod"
+		]
+	},
+	"mixins": [
+		"awa_keyviewer.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

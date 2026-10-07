@@ -1,0 +1,14 @@
+# 统一换行符：gradlew 必须是 LF（Linux/macOS 才能跑），bat 必须是 CRLF
+gradlew text eol=lf
+*.bat text eol=crlf
+
+# 文本文件
+*.java text
+*.gradle text
+*.properties text
+*.json text
+*.md text
+
+# 二进制文件
+*.jar binary
+*.png binary

@@ -19,7 +19,7 @@ public class ColorEditScreen extends Screen {
 	private final ColorTarget target;
 
 	public ColorEditScreen(Screen parent, ColorTarget target) {
-		super(Component.translatable("awa_keyviewer.color.title"));
+		super(Component.translatable("keyviewer_awa.color.title"));
 		this.parent = parent;
 		this.target = target;
 	}
@@ -34,14 +34,14 @@ public class ColorEditScreen extends Screen {
 		channel(left, top + ROW_HEIGHT + ROW_GAP, 8, "green");
 		channel(left, top + (ROW_HEIGHT + ROW_GAP) * 2, 0, "blue");
 
-		addRenderableWidget(Button.builder(Component.translatable("awa_keyviewer.back"), button -> this.onClose())
+		addRenderableWidget(Button.builder(Component.translatable("keyviewer_awa.back"), button -> this.onClose())
 				.bounds(left, top + (ROW_HEIGHT + ROW_GAP) * 3 + 6, SLIDER_WIDTH, ROW_HEIGHT)
 				.build());
 	}
 
 	private void channel(int x, int y, int shift, String name) {
 		addRenderableWidget(new ValueSlider(x, y, SLIDER_WIDTH, ROW_HEIGHT,
-				Component.translatable("awa_keyviewer.color." + name), 0.0F, 255.0F, false,
+				Component.translatable("keyviewer_awa.color." + name), 0.0F, 255.0F, false,
 				() -> (float) ((this.target.get(KeyViewerMod.config()) >> shift) & 0xFF),
 				value -> {
 					KeyViewerConfig config = KeyViewerMod.config();

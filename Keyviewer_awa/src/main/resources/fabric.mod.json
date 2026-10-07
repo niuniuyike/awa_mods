@@ -1,15 +1,15 @@
 {
 	"schemaVersion": 1,
-	"id": "awa_keyviewer",
+	"id": "keyviewer_awa",
 	"version": "${version}",
-	"name": "AWA KeyViewer",
+	"name": "Keyviewer Awa",
 	"description": "Ingame key viewer HUD: shows WASD, mouse buttons and spacebar while you play. The HUD sways with your mouse movement. Configure with /awakeyviewer.",
 	"authors": [
 		"AWA"
 	],
 	"contact": {},
 	"license": "MIT",
-	"icon": "assets/awa_keyviewer/icon.png",
+	"icon": "assets/keyviewer_awa/icon.png",
 	"environment": "client",
 	"entrypoints": {
 		"client": [
@@ -17,7 +17,7 @@
 		]
 	},
 	"mixins": [
-		"awa_keyviewer.mixins.json"
+		"keyviewer_awa.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.19.5",

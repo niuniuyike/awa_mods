@@ -22,7 +22,7 @@ public enum ColorTarget {
 	}
 
 	public String translationKey() {
-		return "awa_keyviewer.option." + optionKey;
+		return "keyviewer_awa.option." + optionKey;
 	}
 
 	public int get(KeyViewerConfig config) {

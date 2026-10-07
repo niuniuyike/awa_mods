@@ -13,7 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class KeyViewerMod implements ClientModInitializer {
-	public static final String MOD_ID = "awa_keyviewer";
+	public static final String MOD_ID = "keyviewer_awa";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
 	private static KeyViewerConfig config;

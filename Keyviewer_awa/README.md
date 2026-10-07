@@ -1,6 +1,6 @@
-# AWA KeyViewer
+# Keyviewer_awa
 
-Minecraft **26.3** Fabric 客户端的按键显示 HUD。
+Minecraft **26.3** Fabric 客户端的按键显示 HUD（游戏内名称：Keyviewer Awa）。
 
 在屏幕上实时显示 **W / A / S / D / 鼠标左键 / 鼠标右键 / 空格**，只有在你真正游玩的时候
 （鼠标被游戏抓取、屏幕上没有光标）才显示；按 ESC、打开聊天、背包等任何界面时自动隐藏。
@@ -62,7 +62,7 @@ Minecraft **26.3** Fabric 客户端的按键显示 HUD。
 | 灵敏度 | 0 ~ 2（平方曲线：低端更细腻，下限几乎不动；1.0 是默认手感） |
 | 其他 | 重置 / 完成 |
 
-设置保存在 `.minecraft/config/awa_keyviewer.json`，改完自动写入。
+设置保存在 `.minecraft/config/keyviewer_awa.json`，改完自动写入。
 
 ## 界面语言
 
@@ -85,7 +85,7 @@ Minecraft **26.3** Fabric 客户端的按键显示 HUD。
 ## 安装
 
 1. 装好 Fabric Loader（0.19.5+）
-2. 把 `awa_keyviewer-1.0.0.jar` 和 `fabric-api-0.161.0+26.3.jar` 一起放进 `.minecraft/mods/`
+2. 把 `Keyviewer_awa-1.0.0.jar` 和 `fabric-api-0.161.0+26.3.jar` 一起放进 `.minecraft/mods/`
 3. 启动游戏，进世界后左下角就能看到 HUD
 
 ## 自己重新构建

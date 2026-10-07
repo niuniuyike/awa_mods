@@ -25,7 +25,7 @@ public class KeyViewerScreen extends Screen {
 	private int previewHeight = 40;
 
 	public KeyViewerScreen() {
-		super(Component.translatable("awa_keyviewer.title"));
+		super(Component.translatable("keyviewer_awa.title"));
 	}
 
 	@Override
@@ -75,13 +75,13 @@ public class KeyViewerScreen extends Screen {
 		this.previewTop = contentBottom + 12;
 		this.previewHeight = Math.max(20, bottom - 12 - this.previewTop);
 
-		addRenderableWidget(Button.builder(Component.translatable("awa_keyviewer.reset"), button -> {
+		addRenderableWidget(Button.builder(Component.translatable("keyviewer_awa.reset"), button -> {
 			KeyViewerMod.config().reset();
 			KeyViewerHud.resetOffsets();
 			// 重建控件以刷新所有文字
 			this.init(this.width, this.height);
 		}).bounds(left, bottom, 90, WIDGET_HEIGHT).build());
-		addRenderableWidget(Button.builder(Component.translatable("awa_keyviewer.done"), button -> this.onClose())
+		addRenderableWidget(Button.builder(Component.translatable("keyviewer_awa.done"), button -> this.onClose())
 				.bounds(left + totalWidth - 90, bottom, 90, WIDGET_HEIGHT).build());
 	}
 
@@ -95,7 +95,7 @@ public class KeyViewerScreen extends Screen {
 
 	private int toggleCell(int index, int left, int top, String optionKey,
 			Supplier<Boolean> getter, Consumer<Boolean> setter) {
-		Component label = Component.translatable("awa_keyviewer.option." + optionKey);
+		Component label = Component.translatable("keyviewer_awa.option." + optionKey);
 
 		addRenderableWidget(Button.builder(toggleLabel(label, getter.get()), button -> {
 			setter.accept(!getter.get());
@@ -106,7 +106,7 @@ public class KeyViewerScreen extends Screen {
 	}
 
 	private static Component toggleLabel(Component label, boolean value) {
-		return label.copy().append(": ").append(Component.translatable(value ? "awa_keyviewer.on" : "awa_keyviewer.off"));
+		return label.copy().append(": ").append(Component.translatable(value ? "keyviewer_awa.on" : "keyviewer_awa.off"));
 	}
 
 	private int colorCell(int index, int left, int top, ColorTarget target) {
@@ -124,7 +124,7 @@ public class KeyViewerScreen extends Screen {
 	private int sliderCell(int index, int left, int top, String optionKey, float min, float max, boolean percent,
 			Supplier<Float> getter, Consumer<Float> setter) {
 		addRenderableWidget(new ValueSlider(cellX(left, index), cellY(top, index), COLUMN_WIDTH, WIDGET_HEIGHT,
-				Component.translatable("awa_keyviewer.option." + optionKey), min, max, percent, getter, setter));
+				Component.translatable("keyviewer_awa.option." + optionKey), min, max, percent, getter, setter));
 
 		return index + 1;
 	}
@@ -137,7 +137,7 @@ public class KeyViewerScreen extends Screen {
 		Font font = client.font;
 
 		graphics.centeredText(font, this.title, this.width / 2, 10, 0xFFFFFFFF);
-		graphics.centeredText(font, Component.translatable("awa_keyviewer.preview"), this.width / 2, this.previewTop - 10,
+		graphics.centeredText(font, Component.translatable("keyviewer_awa.preview"), this.width / 2, this.previewTop - 10,
 				0xFFB0B0B0);
 
 		int frameX = this.width / 2 - 130;

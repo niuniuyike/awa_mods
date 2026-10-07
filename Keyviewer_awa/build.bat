@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul
-title AWA KeyViewer - build
+title Keyviewer_awa - build
 cd /d "%~dp0"
 
 echo ============================================
-echo   AWA KeyViewer  one-click build (MC 26.3)
+echo   Keyviewer_awa  one-click build (MC 26.3)
 echo ============================================
 echo.
 echo [1/3] Checking Java 25 ...
@@ -30,7 +30,7 @@ echo.
 echo [3/3] Done. Your mod jar:
 dir /b build\libs\*.jar
 echo.
-echo Copy "awa_keyviewer-1.0.0.jar" into .minecraft\mods
+echo Copy "Keyviewer_awa-1.0.0.jar" into .minecraft\mods
 echo (Fabric Loader 0.19.5+ and Fabric API 0.161.0+26.3 required)
 echo.
 pause

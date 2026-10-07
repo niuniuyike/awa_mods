@@ -9,4 +9,4 @@ pluginManagement {
 	}
 }
 
-rootProject.name = 'awa_keyviewer'
+rootProject.name = 'keyviewer_awa'

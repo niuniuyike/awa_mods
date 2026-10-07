@@ -1,0 +1,24 @@
+# 构建缓存 / 运行目录 / 日志
+**/.gradle/
+**/run/
+**/logs/
+crash-reports/
+*.log
+
+# 构建产物：只保留可以发布的 jar（各 mod 的 build/libs）
+**/build/*
+!**/build/libs/
+**/build/libs/*
+!**/build/libs/*.jar
+
+# IDE / 系统
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+Thumbs.db
+.DS_Store
+desktop.ini

@@ -30,7 +30,7 @@ echo.
 echo [3/3] Done. Your mod jar:
 dir /b build\libs\*.jar
 echo.
-echo Copy "Keyviewer_awa-1.0.0.jar" into .minecraft\mods
+echo Copy "Keyviewer_awa-1.1.jar" into .minecraft\mods
 echo (Fabric Loader 0.19.5+ and Fabric API 0.161.0+26.3 required)
 echo.
 pause

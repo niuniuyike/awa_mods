@@ -207,10 +207,10 @@ public class KeyViewerHud implements HudElement {
 			int x, int y, int width, int height, String label, KeyId id, boolean pressed, float animationDelta) {
 		float lit = animatePress(id, pressed, animationDelta);
 		float opacity = clampF(config.opacity, 0.0F, 1.0F);
-		int releasedFill = applyOpacity(config.releasedColor, opacity);
+		int releasedFill = applyOpacity(config.releasedColor, opacity * clampF(config.releasedOpacity, 0.0F, 1.0F));
 		int pressedFill = applyOpacity(config.pressedColor, opacity * clampF(config.pressedOpacity, 0.0F, 1.0F));
 		int fill = lerpColor(releasedFill, pressedFill, lit);
-		int border = applyOpacity(config.borderColor, opacity);
+		int border = applyOpacity(config.borderColor, opacity * clampF(config.borderOpacity, 0.0F, 1.0F));
 		int thickness = Math.max(1, (int) Math.round(Math.min(width, height) * 0.06D));
 
 		graphics.fill(x, y, x + width, y + height, fill);

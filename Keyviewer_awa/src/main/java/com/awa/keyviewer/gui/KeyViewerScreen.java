@@ -60,6 +60,10 @@ public class KeyViewerScreen extends Screen {
 				() -> config.textOpacity, value -> config.textOpacity = value);
 		cell = sliderCell(cell, left, top, "pressedOpacity", 0.0F, 1.0F, true,
 				() -> config.pressedOpacity, value -> config.pressedOpacity = value);
+		cell = sliderCell(cell, left, top, "releasedOpacity", 0.0F, 1.0F, true,
+				() -> config.releasedOpacity, value -> config.releasedOpacity = value);
+		cell = sliderCell(cell, left, top, "borderOpacity", 0.0F, 1.0F, true,
+				() -> config.borderOpacity, value -> config.borderOpacity = value);
 		cell = sliderCell(cell, left, top, "posX", 0.0F, 1.0F, true,
 				() -> config.posX, value -> config.posX = value);
 		cell = sliderCell(cell, left, top, "posY", 0.0F, 1.0F, true,

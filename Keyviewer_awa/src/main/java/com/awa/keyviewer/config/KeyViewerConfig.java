@@ -19,6 +19,8 @@ public class KeyViewerConfig {
 	public static final float DEF_OPACITY = 1.0F;
 	public static final float DEF_TEXT_OPACITY = 1.0F;
 	public static final float DEF_PRESSED_OPACITY = 1.0F;
+	public static final float DEF_RELEASED_OPACITY = 1.0F;
+	public static final float DEF_BORDER_OPACITY = 1.0F;
 	public static final float DEF_POS_X = 0.04F;
 	public static final float DEF_POS_Y = 0.70F;
 	public static final float DEF_SIZE = 1.0F;
@@ -41,6 +43,10 @@ public class KeyViewerConfig {
 	public float textOpacity = DEF_TEXT_OPACITY;
 	/** 键位亮起（按下）时的透明度。 */
 	public float pressedOpacity = DEF_PRESSED_OPACITY;
+	/** 键位松开时的透明度。 */
+	public float releasedOpacity = DEF_RELEASED_OPACITY;
+	/** 边框透明度。 */
+	public float borderOpacity = DEF_BORDER_OPACITY;
 
 	// 位置（0~1，相对屏幕，指 HUD 左上角）
 	public float posX = DEF_POS_X;
@@ -101,6 +107,8 @@ public class KeyViewerConfig {
 		opacity = DEF_OPACITY;
 		textOpacity = DEF_TEXT_OPACITY;
 		pressedOpacity = DEF_PRESSED_OPACITY;
+		releasedOpacity = DEF_RELEASED_OPACITY;
+		borderOpacity = DEF_BORDER_OPACITY;
 		posX = DEF_POS_X;
 		posY = DEF_POS_Y;
 		size = DEF_SIZE;
@@ -111,6 +119,8 @@ public class KeyViewerConfig {
 		opacity = clamp(opacity, 0.0F, 1.0F);
 		textOpacity = clamp(textOpacity, 0.0F, 1.0F);
 		pressedOpacity = clamp(pressedOpacity, 0.0F, 1.0F);
+		releasedOpacity = clamp(releasedOpacity, 0.0F, 1.0F);
+		borderOpacity = clamp(borderOpacity, 0.0F, 1.0F);
 		posX = clamp(posX, 0.0F, 1.0F);
 		posY = clamp(posY, 0.0F, 1.0F);
 		size = clamp(size, 0.5F, 3.0F);
